@@ -1,9 +1,9 @@
-const notesModel = require('../models/notes.model')
+const noteModel = require('../models/notes.model')
 
 const saveNotes = async (req, res) => {
     try {
         const { title, description } = req.body;
-        const note = await notesModel.create({ title, description });
+        const note = await noteModel.create({ title, description });
 
         return res.status(201).json({
             message: 'notes saved successfully',

@@ -17,5 +17,5 @@ const noteSchema = new Schema(
     }
 )
 
-const noteModel = model('note',noteSchema)
-module.export = noteModel;
+const noteModel = model('note', noteSchema)
+module.exports = noteModel;
