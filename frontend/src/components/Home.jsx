@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { v4 as uuidv4 } from 'uuid';
-import { addToPaste, resetPaste, updateToPaste, removePaste } from '../redux/features/pasteSlice';
+import { createNoteThunk, updateNoteThunk, deleteNoteThunk, fetchNotesThunk } from '../redux/features/noteSlice';
 import { FaRedo, FaRegEdit } from 'react-icons/fa';
 import { NavLink } from 'react-router-dom';
 import { MdDelete } from "react-icons/md";
@@ -18,24 +17,26 @@ export const Home = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const pasteId = searchParams.get('pasteId');
   const dispatch = useDispatch();
-  const { pastes } = useSelector((state) => state.paste);
+  const { notes } = useSelector((state) => state.paste);
 
-  const slicedArr = pastes.slice(0, 3);
+  const slicedArr = notes.slice(0, 3);
+
+  useEffect(() => {
+    dispatch(fetchNotesThunk())
+  }, [])
 
   useEffect(() => {
     if (pasteId) {
-      const pasteToEdit = pastes.find((p) => p.id === pasteId);
+      const pasteToEdit = notes.find((p) => p._id === pasteId);
       if (pasteToEdit) {
         setTitleText(pasteToEdit.title);
-        setValue(pasteToEdit.data);
+        setValue(pasteToEdit.description);
         setSearchParams({ pasteId: pasteId });
       }
     }
-  }, [pasteId, pastes, setSearchParams]);
-
+  }, [pasteId]);
 
   const copyFromHome = async (text) => {
-    // small guard and user feedback
     if (!navigator?.clipboard) {
       toast.error('Clipboard not supported');
       return;
@@ -46,45 +47,6 @@ export const Home = () => {
     } catch {
       toast.error('Copy failed');
     }
-  };
-  const sharePaste = async (p) => {
-    const Url = `${window.location.origin}/?pasteId=${p.id}`
-    if (navigator.share) {
-      try {
-        await navigator.share(
-          {
-            title: p.title || 'shared paste',
-            text: p.data,
-            url: Url
-          }
-        );
-        toast.success("shared successfully")
-      }
-      catch (error) {
-        if (error.name !== 'AbortError') {
-          await copyFromClipboard(Url);
-          toast.success("link copied to clipboard successfully")
-        }
-
-      }
-    } else {
-      await copyFromClipboard(Url);
-      toast.success('Link copied to clipboard');
-    }
-  }
-
-
-  const reset = () => {
-    dispatch(resetPaste());
-    setTitleText('');
-    setValue('');
-    setSearchParams({});
-  };
-
-  const createNewPaste = () => {
-    setTitleText('');
-    setValue('');
-    setSearchParams({});
   };
 
   const copyFromClipboard = async (text) => {
@@ -100,37 +62,62 @@ export const Home = () => {
     }
   };
 
-  const createPaste = () => {
-    const paste = {
-      id: pasteId || uuidv4(),
-      title: inputTitle,
-      isPinned:false,
-      data: value,
-      createAt: new Date().toISOString(),
-    };
-
-    if (pasteId) {
-      dispatch(updateToPaste(paste));
+  const sharePaste = async (p) => {
+    const Url = `${window.location.origin}/?pasteId=${p._id}`
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: p.title || 'shared paste',
+          text: p.description,
+          url: Url
+        });
+        toast.success("shared successfully")
+      } catch (error) {
+        if (error.name !== 'AbortError') {
+          await copyFromClipboard(Url);
+          toast.success("link copied to clipboard successfully")
+        }
+      }
     } else {
-      dispatch(addToPaste(paste));
+      await copyFromClipboard(Url);
+      toast.success('Link copied to clipboard');
     }
+  }
 
+  const reset = () => {
+    setTitleText('');
+    setValue('');
+    setSearchParams({});
+  };
+
+  const createNewPaste = () => {
+    setTitleText('');
+    setValue('');
+    setSearchParams({});
+  };
+
+  const createPaste = () => {
+    if (pasteId) {
+      dispatch(updateNoteThunk({ id: pasteId, data: { title: inputTitle, description: value } }))
+    } else {
+      dispatch(createNoteThunk({ title: inputTitle, description: value }))
+    }
     setTitleText('');
     setValue('');
     setSearchParams({});
   };
 
   const editMode = (id) => {
-    const pasteToEdit = pastes.find((p) => p.id === id);
+    const pasteToEdit = notes.find((p) => p._id === id);
     if (pasteToEdit) {
       setTitleText(pasteToEdit.title);
-      setValue(pasteToEdit.data);
+      setValue(pasteToEdit.description);
       setSearchParams({ pasteId: id });
     }
   };
 
   const deletePaste = (id) => {
-    dispatch(removePaste(id));
+    dispatch(deleteNoteThunk(id))
   };
 
   return (
@@ -167,7 +154,6 @@ export const Home = () => {
         </div>
       </div>
 
-
       <div className="mb-8 relative">
         <textarea
           className="w-full min-h-[300px] rounded-2xl border p-4 font-mono text-sm"
@@ -176,8 +162,7 @@ export const Home = () => {
           placeholder="Type here..."
           onChange={(e) => setValue(e.target.value)}
         />
-        <button onClick={() => copyFromHome(value)} aria-label="Copy paste" className="text-gray-600 hover:text-gray-800 
-        absolute top-5 right-5">
+        <button onClick={() => copyFromHome(value)} aria-label="Copy paste" className="text-gray-600 hover:text-gray-800 absolute top-5 right-5">
           <IoCopyOutline />
         </button>
       </div>
@@ -187,22 +172,21 @@ export const Home = () => {
         <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           {slicedArr.length > 0 ? (
             slicedArr.map((p) => (
-              <div key={p.id} className="flex justify-center">
+              <div key={p._id} className="flex justify-center">
                 <div className="w-full max-w-xl border rounded-lg bg-white flex flex-col">
 
                   <div className="flex items-center justify-between px-4 py-3 border-b gap-5">
                     <h3 className="text-md font-medium truncate">{p.title || 'Untitled'}</h3>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => editMode(p.id)} aria-label="Edit" className="text-gray-600">
+                      <button onClick={() => editMode(p._id)} aria-label="Edit" className="text-gray-600">
                         <FaRegEdit />
                       </button>
-                      <NavLink to={`/Notes/Notes/?pasteId=${p.id}`} aria-label="View paste" className="text-gray-600 hover:text-gray-800">
+                      <NavLink to={`/notes/${p._id}`} aria-label="View paste" className="text-gray-600 hover:text-gray-800">
                         <IoEyeSharp />
                       </NavLink>
-                      <button onClick={() => copyFromClipboard(p.data)} aria-label="Copy" className="text-gray-600">
+                      <button onClick={() => copyFromClipboard(p.description)} aria-label="Copy" className="text-gray-600">
                         <IoCopyOutline />
                       </button>
-
                       <button
                         onClick={() => sharePaste(p)}
                         aria-label="Share"
@@ -210,34 +194,29 @@ export const Home = () => {
                       >
                         <CiShare1 />
                       </button>
-
                     </div>
                   </div>
-
 
                   <div className="px-4 py-3">
-                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-sm">{p.data}</pre>
+                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-sm">{p.description}</pre>
                   </div>
 
-
                   <div className="px-4 py-2 border-t flex gap-2 justify-between ">
-                    <div className="px-4 py-2  flex gap-2  ">
-                      <span className="material-symbols-outlined">
-                        calendar_clock
-                      </span>
+                    <div className="px-4 py-2 flex gap-2">
+                      <span className="material-symbols-outlined">calendar_clock</span>
                       <span>
-                        <small className="text-xs text-gray-500">	{new Date(p.createAt).toLocaleDateString('en-GB', {
-                          day: 'numeric', month: 'long', year: 'numeric'
-                        })
-                        }</small>
+                        <small className="text-xs text-gray-500">
+                          {new Date(p.createdAt).toLocaleDateString('en-GB', {
+                            day: 'numeric', month: 'long', year: 'numeric'
+                          })}
+                        </small>
                       </span>
                     </div>
-                    <div className="px-4 py-2  flex gap-2  justify-evenly">
-                      <button onClick={() => deletePaste(p.id)} aria-label="Delete paste" className="text-red-600 hover:text-red-800">
+                    <div className="px-4 py-2 flex gap-2 justify-evenly">
+                      <button onClick={() => deletePaste(p._id)} aria-label="Delete paste" className="text-red-600 hover:text-red-800">
                         <MdDelete />
                       </button>
                     </div>
-
                   </div>
                 </div>
               </div>
@@ -247,9 +226,9 @@ export const Home = () => {
           )}
         </div>
 
-        {pastes.length > 3 && (
+        {notes.length > 3 && (
           <div className="mt-4 flex justify-center items-center">
-            <NavLink to="/Notes" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+            <NavLink to="/notes" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
               View All Notes
             </NavLink>
           </div>
