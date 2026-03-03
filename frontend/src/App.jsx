@@ -14,6 +14,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { Navigate } from 'react-router-dom'
 import { useEffect } from 'react'
 import { fetchMeThunk } from './redux/features/authSlice'
+import { fetchNotesThunk } from './redux/features/noteSlice'
 
 const ProtectedRoute = ({ children }) => {
   const { user, initialized } = useSelector((state) => state.auth)
@@ -83,11 +84,19 @@ const router = createBrowserRouter([
 
 const App = () => {
   const dispatch = useDispatch()
+  const { user, initialized } = useSelector((state) => state.auth)
 
   useEffect(() => {
     dispatch(fetchMeThunk())
   }, [dispatch])
 
+
+  useEffect(() => {
+    if (initialized && user) {
+      dispatch(fetchNotesThunk())
+    }
+  }, [dispatch, initialized, user])
+  
   return (
     <div>
       <RouterProvider router={router} />
