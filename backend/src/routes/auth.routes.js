@@ -7,6 +7,8 @@ const { registerValidationRules, validateRequest } = require('../validations/aut
 
 router.post('/user/register', registerValidationRules, validateRequest, authController.registerUser)
 router.post('/user/login', authController.loginUser)
+router.get('/user/google', authController.googleOAuthRedirect)
+router.get('/user/google/callback', authController.googleOAuthCallback)
 router.get('/user/logout', authController.logoutUser)
 router.get('/user/me', authMiddleware, authController.getMe)
 router.post('/user/verify-otp', authController.verifyOtp)

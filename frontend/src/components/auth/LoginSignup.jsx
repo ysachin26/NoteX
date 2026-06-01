@@ -5,6 +5,7 @@ import { loginThunk, registerThunk, clearError } from '../../redux/features/auth
 import { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast'
+import { getGoogleAuthUrl } from '../../api/authApi'
 
 export const LoginSignup = () => {
     const [isLogin, setIsLogin] = useState('Login')
@@ -74,7 +75,11 @@ export const LoginSignup = () => {
 
     }
 
- 
+    const handleGoogleSignup = () => {
+        window.location.href = getGoogleAuthUrl()
+    }
+
+
 
     return (
         <div
@@ -187,6 +192,14 @@ export const LoginSignup = () => {
                             type="submit"
                         >
                             {isLoginMode ? 'Login' : 'Create account'}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={handleGoogleSignup}
+                            className="w-full rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-700 transition hover:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-300/60"
+                        >
+                            Continue with Google
                         </button>
 
                         {error && (

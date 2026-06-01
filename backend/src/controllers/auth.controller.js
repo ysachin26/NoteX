@@ -7,8 +7,35 @@ const sendOTP = require('../service/sendOTP.js')
 const generateOTP = require('../utility/generateOTP.js')
 const hashingOTP = require('../utility/hashingOTP.js')
 const dotenv = require('dotenv')
+const { OAuth2Client } = require('google-auth-library')
 const { query } = require('express-validator');
 dotenv.config()
+
+function createJwtToken(user) {
+    const jwtSecret = process.env.JWT_SECRET
+    if (!jwtSecret) {
+        return null
+    }
+    return jwt.sign(
+        {
+            id: user._id,
+        },
+        jwtSecret
+    )
+}
+
+function buildGoogleRedirectUri(req) {
+    return process.env.GOOGLE_REDIRECT_URI || `${req.protocol}://${req.get('host')}/api/auth/user/google/callback`
+}
+
+function getGoogleOAuthClient(req) {
+    const clientId = process.env.GOOGLE_CLIENT_ID
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET
+    if (!clientId || !clientSecret) {
+        return null
+    }
+    return new OAuth2Client(clientId, clientSecret, buildGoogleRedirectUri(req))
+}
 
 /**
  * @typedef {{ name: string, email: string, password: string, otp?: string }} RegisterBody
@@ -27,7 +54,7 @@ async function registerUser(req, res) {
     try {
         const { name, email, password } = req.body;
 
-        
+
         const isUserAlreadyExist = await UserModel.findOne(
             {
                 email
@@ -120,6 +147,12 @@ async function loginUser(req, res) {
 
         }
 
+        if (!user.password) {
+            return res.status(400).json({
+                message: "Use Google sign-in for this account"
+            })
+        }
+
         const isPasswordValid = await bcrypt.compare(password, user.password)
 
         if (!isPasswordValid) {
@@ -128,19 +161,12 @@ async function loginUser(req, res) {
             })
         }
 
-        const jwtSecret = process.env.JWT_SECRET
-        if (!jwtSecret) {
+        const token = createJwtToken(user)
+        if (!token) {
             return res.status(500).json({
                 message: "JWT_SECRET is not configured"
             })
         }
-
-        const token = jwt.sign(
-            {
-                id: user._id,
-            },
-            jwtSecret
-        )
 
         res.cookie("token", token)
         res.status(200).json({
@@ -389,7 +415,106 @@ const resetPassword = async (req, res) => {
 }
 
 
+/**
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns
+ */
+async function googleOAuthRedirect(req, res) {
+    const client = getGoogleOAuthClient(req)
+    if (!client) {
+        return res.status(500).json({ message: 'Google OAuth is not configured' })
+    }
+
+    const authUrl = client.generateAuthUrl({
+        scope: ['openid', 'email', 'profile'],
+        prompt: 'select_account',
+    })
+
+    return res.redirect(authUrl)
+}
+
+/**
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns
+ */
+async function googleOAuthCallback(req, res) {
+    try {
+        const { code } = req.query
+        if (!code || typeof code !== 'string') {
+            return res.status(400).json({ message: 'missing authorization code' })
+        }
+
+        const client = getGoogleOAuthClient(req)
+        if (!client) {
+            return res.status(500).json({ message: 'Google OAuth is not configured' })
+        }
+
+        const { tokens } = await client.getToken(code)
+        if (!tokens || !tokens.id_token) {
+            return res.status(400).json({ message: 'missing id token from Google' })
+        }
+
+        const ticket = await client.verifyIdToken({
+            idToken: tokens.id_token,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        })
+
+        const payload = ticket.getPayload()
+        if (!payload || !payload.email || !payload.sub) {
+            return res.status(400).json({ message: 'unable to read Google profile' })
+        }
+
+        const email = payload.email
+        const name = payload.name || payload.given_name || 'Google User'
+        const googleId = payload.sub
+
+        let user = await UserModel.findOne({ email })
+        if (user) {
+            let updated = false
+            if (!user.googleId) {
+                user.googleId = googleId
+                updated = true
+            }
+            if (!user.isVerified) {
+                user.isVerified = true
+                updated = true
+            }
+            if (!user.authProvider) {
+                user.authProvider = 'local'
+                updated = true
+            }
+            if (updated) {
+                await user.save()
+            }
+        } else {
+            user = await UserModel.create({
+                name,
+                email,
+                googleId,
+                authProvider: 'google',
+                isVerified: true,
+            })
+        }
+
+        const token = createJwtToken(user)
+        if (!token) {
+            return res.status(500).json({ message: 'JWT_SECRET is not configured' })
+        }
+
+        res.cookie('token', token)
+        const redirectUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+        return res.redirect(redirectUrl)
+    } catch (error) {
+        return res.status(400).json({
+            message: `Internal Server Error ${error}`,
+        })
+    }
+}
+
 module.exports = {
     registerUser,
-    loginUser, logoutUser, verifyOtp, resendRegisterOtp, forgotPassword, verifyResetOtp, getMe, resetPassword
+    loginUser, logoutUser, verifyOtp, resendRegisterOtp, forgotPassword, verifyResetOtp, getMe, resetPassword,
+    googleOAuthRedirect, googleOAuthCallback
 }

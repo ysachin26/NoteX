@@ -89,4 +89,8 @@ const resetPassword = async (email, password) => {
     )
 }
 
-export { loginUser, registerUser, logoutUser, getMe, verifyEmail, verifyResetOtp, resendRegisterOtp, forgotPassword, resetPassword }
+const getGoogleAuthUrl = () => {
+    return `${axiosInstance.defaults.baseURL}/auth/user/google`
+}
+
+export { loginUser, registerUser, logoutUser, getMe, verifyEmail, verifyResetOtp, resendRegisterOtp, forgotPassword, resetPassword, getGoogleAuthUrl }

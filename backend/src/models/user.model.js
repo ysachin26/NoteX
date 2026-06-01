@@ -16,7 +16,17 @@ const UserSchema = new Schema
             },
             password: {
                 type: String,
-                required: true,
+                required: function () {
+                    return this.authProvider === 'local'
+                },
+            },
+            googleId: {
+                type: String,
+            },
+            authProvider: {
+                type: String,
+                enum: ['local', 'google'],
+                default: 'local',
             },
             otp:
             {
